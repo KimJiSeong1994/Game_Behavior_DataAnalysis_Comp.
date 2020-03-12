@@ -99,5 +99,5 @@ df_test.loc[idx, 'player1_species'] = 2
 x_test = df_test.iloc[:, 1:30]
 
 ## + [ train, validation dataset split ] =========
-from sklearn.model_selection import train_test_split
-train_x, val_x, train_y, val_y = train_test_split(x_train, y_train, stratify = y_train, test_size = 0.2, random_state = 42)
+# from sklearn.model_selection import train_test_split
+# train_x, val_x, train_y, val_y = train_test_split(x_train, y_train, stratify = y_train, test_size = 0.2, random_state = 42)
