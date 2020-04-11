@@ -1,5 +1,5 @@
 # ================================== [ Data Pre-processing ] ===================================
-library(tidyverse); library(data.table); library(dummies)
+library(tidyverse); library(data.table)
 setwd("/Users/gimjiseong/Downloads/[ DACON ] Game_Behavior_DataAnalysis_Comp.")
 train = fread("./data/train.csv", header = T, sep = ",", encoding = "UTF-8")
 
@@ -25,7 +25,7 @@ train %>%
             P1_GetControlGroup = sum(event_GetControlGroup),
             P1_RightClick = sum(event_RightClick),
             P1_Selection = sum(event_Selection),
-            P1_SetControlGr6oup = sum(event_SetControlGroup),
+            P1_SetControlGroup = sum(event_SetControlGroup),
             winner = unique(winner)) -> P1
 
 train %>% 
@@ -40,7 +40,7 @@ train %>%
             P0_GetControlGroup = sum(event_GetControlGroup),
             P0_RightClick = sum(event_RightClick),
             P0_Selection = sum(event_Selection),
-            P0_SetControlGr6oup = sum(event_SetControlGroup)) -> P0 
+            P0_SetControlGroup = sum(event_SetControlGroup)) -> P0 
 
 tidy_train <- left_join(P0, P1, by = "game_id")
 
@@ -52,8 +52,8 @@ tidy_train %>%
          diff_GetControlGroup = P1_GetControlGroup - P0_GetControlGroup,
          diff_RightClick = P1_RightClick - P0_RightClick,
          diff_Selection = P1_Selection - P0_Selection,
-         diff_SetControlGr6oup = P1_SetControlGr6oup - P0_SetControlGr6oup) %>% 
-  select(1:29, winner) -> tidy_train
+         diff_SetControlGroup = P1_SetControlGroup - P0_SetControlGroup) %>% 
+  select(1:length(.), winner) -> tidy_train
 
 tidy_train %>% 
   mutate(P0_species = case_when(P0_species == "T" ~ 1,
@@ -63,6 +63,11 @@ tidy_train %>%
                                 P1_species == "P" ~ 2,
                                 P1_species == "Z" ~ 3)) -> tidy_train
 
+
+
+# train = fread("./data/tidy_train.csv", header = T, sep = ",", encoding = "UTF-8")
+ 
+tidy_train = fread("tidy_train.csv", header = T, sep = ",", encoding = "UTF-8") %>% as.data.frame(.)
 x_train <- tidy_train[, names(tidy_train) != "winner"]
 y_train <- tidy_train[, "winner"]
 
@@ -86,7 +91,7 @@ train %>%
 x_train %>% 
   map_dfc(function(x) str_replace_na(x, 0)) %>% 
   map_dfc(function(x) as.numeric(x)) %>% 
-  mutate(diff_build_building = P1_Build_building - P0_Build_building) -> x_train
+  mutate(diff_build_building = P1_Build_building - P0_Build_building) -> x_train  # 세분화 필요 (업글 / 병력생산)
 
 ## + [ train unit Ability ] =================
 ## ++ [ worker unit ] =======================
@@ -100,7 +105,7 @@ train %>%
   filter(player == 0) %>% 
   left_join(x_train, ., by = "game_id") %>% 
   select(-player) -> x_train
-  
+
 train %>% 
   filter(event == "Ability" & str_detect(event_contents, "Train")) %>% 
   filter(str_detect(event_contents, worker_unit)) %>% 
@@ -137,97 +142,181 @@ x_train %>%
   map_dfc(function(x) as.numeric(x)) %>%
   mutate(diif_train_units = P1_train_units - P0_train_units) -> x_train
 
-## + [ Attact action ] ===============
+## + [ Attack type ] ===================
+## ++ [ target Attack ] ================
 train %>% 
-  filter(event == "Ability" & str_detect(event_contents, "Attack")) %>% 
+  filter(event == "Ability" & str_detect(event_contents, "Attack") & str_detect(event_contents, "Target")) %>% 
   group_by(game_id, player) %>% 
-  summarise(P1_Attack_count = n()) %>% 
+  summarise(P1_Target_attack = n()) %>% 
   filter(player == 1) %>% 
   left_join(x_train, ., by = "game_id") %>% 
   select(-player) -> x_train
-  
+
 train %>% 
-  filter(event == "Ability" & str_detect(event_contents, "Attack")) %>% 
+  filter(event == "Ability" & str_detect(event_contents, "Attack") & str_detect(event_contents, "Target")) %>% 
   group_by(game_id, player) %>% 
-  summarise(P0_Attack_count = n()) %>% 
+  summarise(P0_Target_attack = n()) %>% 
   filter(player == 0) %>% 
   left_join(x_train, ., by = "game_id") %>% 
   select(-player) -> x_train
 
 x_train %>% 
   map_dfc(function(x) str_replace_na(x, 0)) %>% 
-  map_dfc(function(x) as.numeric(x)) %>%
-  mutate(diff_Attack_count = P1_Attack_count - P0_Attack_count) -> x_train
+  map_dfc(function(x) as.numeric(x)) %>% 
+  mutate(diff_Target_attac = P1_Target_attack - P0_Target_attack) %>% 
+  select(-P1_Target_attack, -P0_Target_attack) -> x_train 
 
-## + [ Aboility Upgrade ] ===============
-## ++ [ Attack ] ========================
-attact_upgrade <- c("ShipWeapons", "InfantryWeapons", "GroundWeapons", "AirWeapons", "MeleeAttacks", 
-                    "MissileAttacks", "FlyerAttacks")
+## ++ [ non-target Attack ] ================
 train %>% 
-  filter(player == 0 &str_detect(event_contents, attact_upgrade)) %>% 
-  group_by(game_id,  player) %>% 
-  summarise(attact_upgrade = n(),
-            attact_upgrade = sum(attact_upgrade)) %>% 
-  rename("P0_attact_upgrade" = attact_upgrade) %>% 
-  select(-player) %>% 
-  left_join(x_train, ., by = "game_id") -> x_train
+  filter(event == "Ability" & str_detect(event_contents, "Attack") & !str_detect(event_contents, "Target")) %>% 
+  group_by(game_id, player) %>% 
+  summarise(P1_nonTarget_attack = n()) %>% 
+  filter(player == 1) %>% 
+  left_join(x_train, ., by = "game_id") %>% 
+  select(-player) -> x_train
 
 train %>% 
-  filter(player == 1 &str_detect(event_contents, attact_upgrade)) %>% 
-  group_by(game_id,  player) %>% 
-  summarise(attact_upgrade = n(),
-            attact_upgrade = sum(attact_upgrade)) %>% 
-  rename("P1_attact_upgrade" = attact_upgrade) %>% 
-  select(-player) %>% 
-  left_join(x_train, ., by = "game_id") -> x_train
+  filter(event == "Ability" & str_detect(event_contents, "Attack") & !str_detect(event_contents, "Target")) %>% 
+  group_by(game_id, player) %>% 
+  summarise(P0_nonTarget_attack = n()) %>% 
+  filter(player == 0) %>% 
+  left_join(x_train, ., by = "game_id") %>% 
+  select(-player) -> x_train 
 
 x_train %>% 
   map_dfc(function(x) str_replace_na(x, 0)) %>% 
-  map_dfc(function(x) as.numeric(x)) %>%
-  mutate(diff_Attack_upgrade = P1_attact_upgrade - P0_attact_upgrade) -> x_train
+  map_dfc(function(x) as.numeric(x)) %>% 
+  mutate(diff_nonTarget_attac = P1_nonTarget_attack - P0_nonTarget_attack) %>% 
+  select(-P1_nonTarget_attack, -P0_nonTarget_attack) -> x_train 
 
 
-## ++ [ defense Upgrade ] ================
-defense_upgrad <- c("InfantryArmor", "VehicleandShipPlating", "GroundArmor", "Shields", "AirArmor", "GroundCarapace", "FlyerCarapace")
+## + [ mult-building ] ================== 
+base_buliding = c("Hatchery", "CommandCenter", "Nexus")
+train %>% 
+  filter(event == "Selection" & str_detect(event_contents, base_buliding) & player == 1) %>% 
+  select(game_id, event_contents) %>% 
+  unique() %>% 
+  group_by(game_id) %>% 
+  summarise(P1_mult_n = n()) %>% 
+  mutate(P1_mult_n = str_replace_na(P1_mult_n, 1),
+         P1_mult_n = as.numeric(P1_mult_n)) %>% 
+  left_join(x_train, .) -> x_train 
 
 train %>% 
-  filter(player == 0 &str_detect(event_contents, defense_upgrad)) %>% 
-  group_by(game_id,  player) %>% 
-  summarise(defense_upgrad = n(),
-            defense_upgrad = sum(defense_upgrad)) %>% 
-  rename("P0_defense_upgrad" = defense_upgrad) %>% 
-  select(-player) %>% 
-  left_join(x_train, ., by = "game_id") -> x_train
+  filter(event == "Selection" & str_detect(event_contents, base_buliding) & player == 0) %>% 
+  select(game_id, event_contents) %>% 
+  unique() %>% 
+  group_by(game_id) %>% 
+  summarise(P0_mult_n = n()) %>% 
+  mutate(P0_mult_n = str_replace_na(P0_mult_n, 1),
+         P0_mult_n = as.numeric(P0_mult_n)) %>% 
+  left_join(x_train, .) -> x_train 
+
+
+## + [ command stop ] ======================== 
+train %>% 
+  filter(player == 0, str_detect(event_contents, "Stop")) %>% 
+  group_by(game_id) %>% 
+  summarise(P0_command_stop = n()) %>% 
+  left_join(x_train, .) %>% 
+  mutate(P0_command_stop = str_replace_na(P0_command_stop, 0),
+         P0_command_stop = as.numeric(P0_command_stop)) -> x_train 
 
 train %>% 
-  filter(player == 1 &str_detect(event_contents, defense_upgrad)) %>% 
-  group_by(game_id,  player) %>% 
-  summarise(defense_upgrad = n(),
-            defense_upgrad = sum(defense_upgrad)) %>% 
-  rename("P1_defense_upgrad" = defense_upgrad) %>% 
-  select(-player) %>% 
-  left_join(x_train, ., by = "game_id") -> x_train
+  filter(player == 1, str_detect(event_contents, "Stop")) %>% 
+  group_by(game_id) %>% 
+  summarise(P1_command_stop = n()) %>% 
+  left_join(x_train, .) %>% 
+  mutate(P1_command_stop = str_replace_na(P1_command_stop, 1),
+         P1_command_stop = as.numeric(P1_command_stop)) -> x_train 
+
+
+## + [ None-targe click ] ========================
+
+train %>% 
+  filter(player == 1 & event == "Right Click" & str_detect(event_contents, "Target: None")) %>% 
+  group_by(game_id) %>% 
+  summarise(P1_Nonetarget_click = n()) %>% 
+  left_join(x_train, .) -> x_train
+
+train %>% 
+  filter(player == 0 & event == "Right Click" & str_detect(event_contents, "Target: None")) %>% 
+  group_by(game_id) %>% 
+  summarise(P0_Nonetarget_click = n()) %>% 
+  left_join(x_train, .) -> x_train
 
 x_train %>% 
-  map_dfc(function(x) str_replace_na(x, 0)) %>% 
-  map_dfc(function(x) as.numeric(x)) %>%
-  mutate(diff_defense_upgrade = P1_defense_upgrad - P0_defense_upgrad) -> x_train
+  mutate(P1_Nonetarget_click = str_replace_na(P1_Nonetarget_click, 0),
+         P0_Nonetarget_click = str_replace_na(P0_Nonetarget_click, 0),
+         P1_Nonetarget_click = as.numeric(P1_Nonetarget_click),
+         P0_Nonetarget_click = as.numeric(P0_Nonetarget_click)) -> x_train 
+
+## + [ dummy click ] =============================
+train %>% 
+  filter(player == 1 & event == "Right Click" & str_detect(event_contents, "Target")) %>% 
+  filter(!str_detect(event_contents, "None")) %>% 
+  group_by(game_id) %>% 
+  summarise(P1_Click = n()) -> P1_dummyClick
+
+train %>% 
+  filter(player == 1 & event == "Right Click" & str_detect(event_contents, "Target")) %>% 
+  filter(!str_detect(event_contents, "None")) %>% 
+  unique() %>% 
+  group_by(game_id) %>% 
+  summarise(P1_UniqeClick = n()) %>% 
+  left_join(P1_dummyClick, .) %>% 
+  mutate(P1_dummyClick = P1_Click - P1_UniqeClick) %>% 
+  select(game_id, P1_dummyClick) %>% 
+  left_join(x_train, .) -> x_train
+
+train %>% 
+  filter(player == 0 & event == "Right Click" & str_detect(event_contents, "Target")) %>% 
+  filter(!str_detect(event_contents, "None")) %>% 
+  group_by(game_id) %>% 
+  summarise(P0_Click = n()) -> P0_dummyClick
+
+train %>% 
+  filter(player == 0 & event == "Right Click" & str_detect(event_contents, "Target")) %>% 
+  filter(!str_detect(event_contents, "None")) %>% 
+  unique() %>% 
+  group_by(game_id) %>% 
+  summarise(P0_UniqeClick = n()) %>% 
+  left_join(P0_dummyClick, .) %>% 
+  mutate(P0_dummyClick = P0_Click - P0_UniqeClick) %>% 
+  select(game_id, P0_dummyClick) %>% 
+  left_join(x_train, .) -> x_train
+
+x_train %>% 
+  mutate(P1_dummyClick = str_replace_na(P1_dummyClick, 0),
+         P1_dummyClick = as.numeric(P1_dummyClick),
+         P0_dummyClick = str_replace_na(P0_dummyClick, 0),
+         P0_dummyClick = as.numeric(P0_dummyClick)) -> x_train
+
+## + [ EconomyBoosting ] ========================================
+train %>%
+  filter(player == 1 & str_detect(event_contents, "CalldownMULE") | str_detect(event_contents, "ChronoBoost") | str_detect(event_contents, "SpawnLarva")) %>% 
+  group_by(game_id) %>% 
+  summarise(P1_EconomyBoosting = n()) %>% 
+  left_join(x_train, .) %>% 
+  mutate(P1_EconomyBoosting = str_replace_na(P1_EconomyBoosting, 0),
+         P1_EconomyBoosting = as.numeric(P1_EconomyBoosting)) -> x_train 
+
+train %>%
+  filter(player == 0 & str_detect(event_contents, "CalldownMULE") | str_detect(event_contents, "ChronoBoost") | str_detect(event_contents, "SpawnLarva")) %>% 
+  group_by(game_id) %>% 
+  summarise(P0_EconomyBoosting = n()) %>% 
+  left_join(x_train, .) %>% 
+  mutate(P0_EconomyBoosting = str_replace_na(P0_EconomyBoosting, 0),
+         P0_EconomyBoosting = as.numeric(P0_EconomyBoosting)) -> x_train 
+
 
 # ========================================== [ EDA ] ===========================================
 tidy_train <- cbind(x_train, y_train)
+tidy_train %>% 
+  filter(!P0_GetControlGroup > 2000 & !P1_Camera > 1800) -> tidy_train
+
+tidy_train %>% 
+  rename("winner" = y_train) -> tidy_train
 
 tidy_train %>%
-  write.csv(., "tidy_train.csv")
-
-## + [ correlation ] ============
-data.frame(cor(tidy_train$winner, tidy_train)) %>% 
-  gather(col_names, correlation, 1:46) %>% 
-  filter(col_names != "winner") %>% 
-  arrange(- abs(correlation)) %>% 
-  ggplot(aes(reorder(col_names, abs(correlation)), abs(correlation))) +
-  geom_point(aes(col = correlation > .10), show.legend = F) +
-  coord_flip() +
-  theme_bw() +
-  xlab("") +
-  ylab("") # diff feature make more differiently
-
+  write.csv(., "tidy_train.csv", row.names = F)
